@@ -2,7 +2,6 @@ library(pacman)
 
 pacman::p_load(rio, heatmaply, dplyr, ggplot2, naniar)
 
-
 dataset <- import("~/Documents/ADA Project/in-vehicle-coupon-recommendation.csv", na.strings = "")
 
 head(dataset)
@@ -10,6 +9,8 @@ head(dataset)
 tail(dataset)
 
 str(dataset)
+
+summary(dataset)
 
 colSums(is.na(dataset))
 
