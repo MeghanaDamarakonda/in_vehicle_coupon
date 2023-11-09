@@ -1,8 +1,10 @@
 library(pacman)
 
-pacman::p_load(rio, heatmaply, dplyr, ggplot2, naniar, tidyverse, miscset)
+pacman::p_load(rio, heatmaply, dplyr, ggplot2, naniar, tidyverse, miscset, DescTools)
 
 dataset <- import("~/Documents/ADA Project/in-vehicle-coupon-recommendation.csv", na.strings = "")
+
+dim(dataset)
 
 head(dataset)
 
@@ -18,16 +20,23 @@ colSums(is.na(dataset)) # calculate the number of missing values in every column
 
 vis_miss(dataset)
 
-missing_check <- is.na(dataset)
-missing_check
-
 # drop car column
-
 drop <- c("car")
 dataset = dataset[, !names(dataset) %in% drop]
 print(dataset)
 
 dim(dataset)
+
+#check for dulpicates
+dataset <- distinct(dataset)
+
+dim(dataset)
+
+#mode_val <- Mode(dataset$CarryAway, na.rm = TRUE)
+#print(mode_val)
+
+# Create a bar plot
+barplot(table(dataset$Y), main = "Target Class Distribution")
 
 # fill the missing values in columns using mode
 Mode <- function(a) {
@@ -69,6 +78,3 @@ cat_cols = dplyr::select(dataset, -c('direction_opp', 'direction_same', 'has_chi
                                      'temperature', 'toCoupon_GEQ15min', 'toCoupon_GEQ25min',
                                      'toCoupon_GEQ5min','Y'))
 dim(cat_cols)
-
-
-
