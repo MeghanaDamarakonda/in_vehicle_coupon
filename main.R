@@ -1,8 +1,16 @@
 library(pacman)
 
-pacman::p_load(rio, heatmaply, naniar, tidyverse, miscset, DescTools, reshape2, corrplot)
+pacman::p_load(rio, heatmaply, naniar, tidyverse, miscset, DescTools, reshape2, corrplot, rpart, rpart.plot)
 
 dataset <- import("~/Documents/ADA Project/in-vehicle-coupon-recommendation.csv", na.strings = "")
+
+my_global_theme <- theme_light() + theme(
+    text = element_text(color = "black"),
+    axis.text.x = element_text(color = "black", size = 10),
+    axis.text.y = element_text(color = "black", size = 10)
+  )
+
+theme_set(my_global_theme)
 
 dim(dataset) # 26 attributes, 12684 instances
 
@@ -67,8 +75,11 @@ for (col in names(cat_df_with_more_cols)) {
     geom_bar(alpha = 1) +
     ggtitle(paste("Count Plot for", col)) +
     xlab(col) +
-    ylab("Count") +
-    theme_light()
+    ylab("Count")
+  
+  if (col == "coupon") {
+    plt <- plt + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  }
   
   ggsave(paste(col, "_count_plot.png", sep = ""), plt, width = 8, height = 6, dpi = 300)
   
@@ -79,15 +90,18 @@ head(cat_df_with_5_cols)
 for (col in names(cat_df_with_5_cols)) {
   
   if(col == "occupation") {
+    
     plt <- ggplot(cat_df_with_5_cols, aes_string(y = col, fill = col)) +
       geom_bar(alpha = 1) +
       ggtitle(paste("Count Plot for", col)) +
       xlab("Count") +
       ylab(col) +
-      theme_light() + 
       theme(legend.position = "none")
+    
     ggsave(paste(col, "_count_plot.png", sep = ""), plt, width = 8, height = 6, dpi = 300)
+    
   } else {
+    
     plot_df <- cat_df_with_5_cols %>% 
       group_by(.data[[col]]) %>% 
       count() %>% ungroup() %>% mutate(perc = round(n / sum(n), 3))
@@ -113,8 +127,7 @@ dim(num_df)
 plt <- ggplot(gather(num_df), aes(x = value)) + 
   geom_histogram(bins = 10, fill = "skyblue") + 
   facet_wrap(~key, scales = "free") +
-  ggtitle("Frequency distribution of numerical features") + 
-  theme_light()
+  ggtitle("Frequency distribution of numerical features")
 
 ggsave("hist_plot.png", plt, width = 8, height = 6, dpi = 300)
 
@@ -171,13 +184,12 @@ dataset[, numerical_columns] <- lapply(dataset[, numerical_columns], as.characte
 feature_names <- setdiff(colnames(dataset), "Y")
 
 for (col in feature_names) {
-
+  
   plt <- ggplot(dataset, aes(x = .data[[col]], fill = Y)) +
     geom_bar(position = "stack", stat = "count", width = 0.8) +
     labs(title = paste(col, "with target"), x = col, y = "count") +
     scale_fill_discrete(name = "Target (Y)",
                         labels = c("Reject", "Accept")) +
-    theme_light() +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1),
       legend.position = c(1,1),  # Adjust the position (top-right corner in this case)
@@ -192,42 +204,130 @@ for (col in feature_names) {
   } else {
     plt <- plt + coord_flip()
   }
-
+  
   ggsave(paste(col, "_target_plot.png", sep = ""), plt, width = 8, height = 6, dpi = 300)
   
 }
 
+# Analysing the type of destination (CoffeHouse) and coupon.
+plot_coupon_dest <- function(coupon_type, dest_type){
+  
+  plt_df <- dataset[dataset$coupon == coupon_type, ]
+  
+  plt <- ggplot(plt_df, aes(x = .data[[dest_type]], fill = Y)) +
+    geom_bar(position = position_dodge(width = 0.9)) +
+    geom_text(aes(label = scales::percent(round(..count.. / sum(..count..), 3))), 
+              stat = "count", position = position_dodge(width = 0.9), vjust = -0.5, size = 2.5) +
+    scale_fill_discrete(name = "Y",
+                        labels = c("Reject", "Accept")) +
+    labs(title = paste("Comparing per month visit to", dest_type, "based on", coupon_type, "coupon"),
+         x = paste("visits in a month"),
+         y = "Count")
+  
+  ggsave(paste(coupon_type, "_", dest_type, "_plot.png", sep = ""), plt, width = 8, height = 6, dpi = 300)
 
-# Multi-variate analysis
+}
+
+plot_coupon_dest("Coffee House", "CoffeeHouse")
+
+plot_coupon_dest("Carry out & Take away", "CarryAway")
+
+
+# Multivariate analysis
+plot_cat_vs_cat <- function(feat1, feat2, df, rot_angle, size_val, round_val = 4) {
+  
+  df$feat1_feat2 <- paste(df[[feat1]], df[[feat2]] , sep = " & ")
+
+  plt <- ggplot(df, aes(x = feat1_feat2, fill = Y)) +
+    geom_bar(position = position_dodge(width = 0.9)) +
+    geom_text(aes(label = scales::percent(round(..count.. / sum(..count..), round_val))), 
+              stat = "count", position = position_dodge(width = 0.9), vjust = -0.5, size = size_val) +
+    scale_fill_discrete(name = "Y",
+                        labels = c("Reject", "Accept")) +
+    labs(title = paste("Effect of", feat1, "and", feat2, "on target"),
+         x = paste(feat1, "and", feat2, "combined"),
+         y = "Count") +
+    theme(
+      axis.text.x = element_text(angle = rot_angle, hjust = 1)
+    )
+  
+  ggsave(paste(feat1, "_", feat2, "_plot.png", sep = ""), plt, width = 8, height = 6, dpi = 300)
+  
+}
+
+df <- data.frame(dataset)
+
+plot_cat_vs_cat("weather", "temperature", df, 45, 2.5)
+
+plot_cat_vs_cat("passanger", "destination", df, 45, 2)
+
+plot_cat_vs_cat("destination", "direction_same", df, 45, 2.5)
+
+plot_cat_vs_cat("gender", "time", df, 45, 2.5, round_val=3)
+
+
+plot_more_cols <- function(feat1, feat2, feat3, df, rot_angle) {
+  
+  df$feat1_feat2_feat3 <- paste(df[[feat1]], df[[feat2]], df[[feat3]], sep = " & ")
+  
+  plt <- ggplot(df, aes(x = feat1_feat2_feat3, fill = Y)) +
+    geom_bar(position = position_dodge(width = 0.9)) +
+    scale_fill_discrete(name = "Y",
+                        labels = c("Reject", "Accept")) +
+    labs(title = paste("Effect of", feat1, "and", feat2, "and", feat3, "on target"),
+         x = paste(feat1, "and", feat2, "and", feat3, "combined"),
+         y = "Count") +
+    theme(
+      axis.text.x = element_text(angle = rot_angle, hjust = 1)
+    )
+  
+  ggsave(paste(feat1, "_", feat2, "_", feat3,"_plot.png", sep = ""), plt, width = 8, height = 6, dpi = 300)
+
+}
+
+plot_more_cols("coupon", "expiration", "drive_time", df, 90)
+
 
 
 
 # Plot Decision Tree
 
+tree_model <- rpart(Y ~., data = dataset, method = "class")
 
-# Train with random forest for feature importance
+png("decision_tree_plot.png", width = 800, height = 600, units = "px", res = 300)
+rpart.plot(tree_model)
+dev.off()
 
-# Train a Random Forest model
+
+# Using random forest algorithm for finding feature importance
+
+dataset$Y <- as.factor(dataset$Y)
+
 rf_model <- randomForest(Y ~ ., data = dataset, ntree = 100)
 
 # Get feature importance
-importance <- importance(rf_model)
+importance_values <- importance(rf_model)
 
-# Print feature importance
-print(importance)
+normalized_importance <- scale(importance_values, center = min(importance_values), scale = diff(range(importance_values)))
+
 
 # Create a data frame for plotting
 importance_df <- data.frame(
-  Feature = rownames(importance),
-  Importance = importance[, "MeanDecreaseGini"]
+  Feature = rownames(normalized_importance),
+  Importance = normalized_importance[, 1]
 )
 
-# Create a bar plot
-ggplot(importance_df, aes(x = Feature, y = Importance)) +
-  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
-  labs(title = "Feature Importance from Random Forest",
-       x = "Feature", y = "Mean Decrease in Gini") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+importance_df <- importance_df[order(importance_df$Importance, decreasing = FALSE), ]
+
+importance_df$Feature <- factor(importance_df$Feature, levels = importance_df$Feature)
+
+plt <- ggplot(importance_df, aes(x = Importance, y = Feature)) +
+  geom_bar(stat = "identity", fill = "#DFB982") +
+  labs(title = "Feature Importance using Random Forest",
+       x = "Importance",
+       y = "Features")
+
+
+ggsave(paste("feat_imp_plot.png"), plt, width = 8, height = 6, dpi = 300)
 
 
